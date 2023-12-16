@@ -16,6 +16,8 @@ char hexaKeys[ROWS][COLS] = {
     {'*', '0', '#', 'D'}};
 byte colPins[COLS] = {6, 7, 8, 9};     // connect to the column pinouts of the keypad
 byte rowPins[ROWS] = {10, 11, 12, 13}; // connect to the row pinouts of the keypad
+char backButton = '*';
+char enterButton = '#';
 /*END 4*4 KEYPAD STUFF*/
 
 /*OLED SCREEN STUFF*/
@@ -25,7 +27,9 @@ byte rowPins[ROWS] = {10, 11, 12, 13}; // connect to the row pinouts of the keyp
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 /*END OLED SCREEN STUFF*/
 
+char systemID[2];
 char deviceID[2];
+char desiredState;
 
 /*HOUSE KEEPING*/
 // initialize an instance of class NewKeypad
@@ -57,62 +61,58 @@ void setup()
 
 void loop()
 {
-  display.clearDisplay(); // clear display on new loop
-  GetDeviceID();          // get device id and dispaly to screen
-  // ask to confirm device id
-  // if * pressed call GetDeviceID again
-  // if # is pressed, go to next thing
-  delay(1000); // delay between loops
+  // draw display
+  display.clearDisplay();
+  display.setCursor(15, 15);
+  display.print(F("To begin press #"));
+  display.display();
+
+  char keypadReading = customKeypad.getKey();
+  if (keypadReading == '#')
+  {
+    Serial.println(F("Key # pressed"));
+    display.clearDisplay();
+    display.setCursor(15, 15);
+    display.print(F("Key # pressed"));
+    display.display();
+    delay(2000);
+  }
+  else
+  {
+    Serial.println(F("No input detected."));
+  }
+
+  delay(10); // delay between loops
 }
 
 /****CUSTOM FUNCTIONS****/
 
-// get device id
-void GetDeviceID()
+// get system id
+void GetSystemID()
 {
   for (size_t i = 0; i < 2;) // start a loop
   {
+    display.clearDisplay();
+    display.setCursor(10, 0); // Set the cursor position
+    display.print(F("Input a System ID."));
+
+    // below we get two digits from the keypad
     char keypadReading = customKeypad.getKey(); // take a polling from the keypad and store it
+    // if there is data in the buffer && it is valid
+    if (keypadReading > 0 && keypadReading != 'backButton' && keypadReading != 'enterButton' && keypadReading != 'A' && keypadReading != 'B' && keypadReading != 'C' && keypadReading != 'D')
+    {
+      systemID[i] = keypadReading; // transfer the data from the buffer to the current system array || convert from char to int
+      Serial.print("updated system ID: digit: ");
+      Serial.println(i);
 
-    // if there is data in the buffer
-    if (keypadReading > 0)
-    { // if cancel key not pressed (*)
-      if (keypadReading != '*')
-      {
-        deviceID[i] = keypadReading; // transfer the data from the buffer to the current device array || convert from char to int
-        Serial.println("updated device Id with new digit");
-        i++; // increase the loop counter for the next run
-        // update the screen inside the for loop to see the updates
-        showOnScreen();
-        delay(10); // delay between readings for stability
-      }
-      else
-      {
-        deviceID[0] = -1;
-        deviceID[1] = -1;
-        break;
-      }
-    }
-    // add save and exit function here
-    // add reset & exit function here
-  }
-  
-    Serial.println("Exited for loop");
-}
-
-void showOnScreen(void)
-{
-  display.clearDisplay();
-  display.setCursor(0, 0); // Start at top-left corner
-  display.print(F("Device ID: "));
-  display.print(deviceID[0]);   // print first number in the array
-  display.println(deviceID[1]); // print second number in the array
-  display.display();            // render the contents to the screen
-}
-
-void showOnSerial(void)
-{
-  Serial.print(F("Device ID: "));
-  Serial.print(deviceID[0]);   // print first number in the array
-  Serial.println(deviceID[1]); // print second number in the array
-}
+      // update the screen inside the for loop to see the updates
+      display.setCursor(0, 10); // Set the cursor position
+      display.print(F("System_ID = "));
+      display.print(systemID[0]);   // print first number in the array
+      display.println(systemID[1]); // print second number in the array
+      display.display();            // render the contents to the screen
+      i++;                          // increase the loop counter for the next run
+    }                               // end of main input check
+  }                                 // end of for loop
+  Serial.println("Successfully got a system ID input.");
+} // end of function
