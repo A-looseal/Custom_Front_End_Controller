@@ -28,16 +28,18 @@ char key_yes = '#';
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 /*END OLED SCREEN STUFF*/
 
-const byte stage_idle = 0;
-const byte stage_getSystemID = 1;
-const byte stage_getDeviceID = 2;
-const byte stage_getDesiredState = 3;
-const byte stage_Test = 5;
+const byte stage_verify = -2;
+const byte stage_error = -1;
+const byte stage_complete = 0;
+const byte stage_idle = 1;
+const byte stage_getSystemID = 2;
+const byte stage_getDeviceID = 3;
+const byte stage_getDesiredState = 4;
 byte previousStage;
 byte currentStage = stage_idle;
 
 char systemID[2] = {null, null};
-char deviceID[2];
+char deviceID[2] = {null, null};
 char desiredState;
 
 /*HOUSE KEEPING*/
@@ -71,10 +73,14 @@ void setup()
 void loop()
 {
   Idle();
-  InputSystemID();
-  //InputDeviceID();
-  TestStage();
+  Input_SystemID();
+  Input_DeviceID();
+  Input_OnOff();
+  VerifyStage();
 }
+
+// todo : fadf
+/* todo : this is */
 
 /****CUSTOM FUNCTIONS****/
 
@@ -101,116 +107,225 @@ void Idle()
 }
 
 // get system id
-void InputSystemID()
+void Input_SystemID()
 {
-  if (currentStage == stage_getSystemID)
+  if (currentStage == stage_getSystemID) // if the current stage is on get system id input from the user
   {
 
-    for (size_t i = 0; i < 3;) // stage 1 loop
+    for (size_t _stageCounter = 0; _stageCounter < 3;) // stage 1 loop
     {
-      display.clearDisplay();
-      delay(20);
+      display.clearDisplay(); // clear the display buffer contents
 
-      Serial.print("on loop #: ");
-      Serial.println(i);
+      display.setCursor(0, 0);         // set the cursor position
+      display.print(F("System ID: ")); // print to the display
+      display.print(systemID[0]);      // select the first index of the system id array
+      display.println(systemID[1]);    // select the second index of the system id array
 
-      display.setCursor(0, 0);
-      display.print(F("System ID: "));
-      display.print(systemID[0]);
-      display.println(systemID[1]);
+      char keypadReading = customKeypad.getKey(); // takes a reading from the keypad
 
-      char keypadReading = customKeypad.getKey();
-
-      Serial.println(F("waiting for input"));
-
-      // can do the following on any stage when the back key is pressed
+      /*can do the following on any stage when the back key is pressed*/
       if (keypadReading == key_no)
       {
-        i--;
-        systemID[i] = null;
-        display.clearDisplay();
-        Serial.println(F("back key pressed"));
+        /*TODO: prevent going below 0*/
+        _stageCounter--;                // set the stage back to previous
+        systemID[_stageCounter] = null; // clear current system id value
+        display.clearDisplay();         // clear the display buffer contents
       }
 
       // only do the following if we are on stage 1, or 2 and input is a digit.
-      if (i < 2 && keypadReading > 0 && keypadReading != key_no && keypadReading != key_yes && keypadReading != 'A' && keypadReading != 'B' && keypadReading != 'C' && keypadReading != 'D')
+      if (_stageCounter < 2 && keypadReading > 0 && keypadReading != key_no && keypadReading != key_yes && keypadReading != 'A' && keypadReading != 'B' && keypadReading != 'C' && keypadReading != 'D')
       {
-        systemID[i] = keypadReading;
-        i++;
-        Serial.println(F("number has been input"));
+        systemID[_stageCounter] = keypadReading; // assign the input from keypad to the system id value
+        _stageCounter++;                         // increase stage to next
       }
 
       // only do the following on confirmation stage
-      if (i >= 2)
+      if (_stageCounter >= 2)
       {
-        display.setCursor(20, 25);
+        display.setCursor(20, 25); // set the cursor position
         display.print(F("R U SURE?"));
-
+        // if the yes key has been pressed
         if (keypadReading == key_yes)
         {
-          i++;
-          Serial.println(F("confirm key pressed"));
+          _stageCounter++; // increase the stage
         }
       }
 
-      display.display();
-    } // end stage 1 loop
-    Serial.println(F("Successfully got a system ID input."));
+      display.display();               // render everything to the display
+    }                                  // end stage 1 loop
     previousStage = stage_getSystemID; // set the previous stage as the current stage
-    currentStage = stage_Test;  // go to the next stage
+    currentStage = currentStage++;     // go to the next stage
   }                                    // end of function
-}
+} // END "INPUT SYSTEM ID" FUNCTION
 
-// get device id
-void InputDeviceID()
+// get system id
+void Input_DeviceID()
 {
-  if (currentStage == stage_getDeviceID)
+  if (currentStage == stage_getDeviceID) // if the current stage is on get Device id input from the user
   {
-    display.clearDisplay();
-    for (size_t i = 0; i < 2;) // stage 1 loop
+
+    for (size_t _stageCounter = 0; _stageCounter < 3;) // stage 1 loop
     {
-      display.setCursor(0, 0);
-      display.print(F("Device ID: "));
-      display.print(deviceID[0]);
-      display.println(deviceID[1]);
+      display.clearDisplay(); // clear the display buffer contents
 
-      char keypadReading = customKeypad.getKey();
+      display.setCursor(0, 0);         // set the cursor position
+      display.print(F("Device ID: ")); // print to the display
+      display.print(deviceID[0]);      // select the first index of the Device id array
+      display.println(deviceID[1]);    // select the second index of the Device id array
 
-      /*CHECK FOR ERASE*/
+      char keypadReading = customKeypad.getKey(); // takes a reading from the keypad
+
+      /*can do the following on any stage when the back key is pressed*/
       if (keypadReading == key_no)
       {
-        display.clearDisplay();
-        i--;
+        /*TODO: prevent going below 0*/
+        _stageCounter--;                // set the stage back to previous
+        deviceID[_stageCounter] = null; // clear current system id value
+        display.clearDisplay();         // clear the display buffer contents
       }
 
-      if (keypadReading > 0 && keypadReading != key_no && keypadReading != key_yes && keypadReading != 'A' && keypadReading != 'B' && keypadReading != 'C' && keypadReading != 'D')
+      // only do the following if we are on stage 1, or 2 and input is a digit.
+      if (_stageCounter < 2 && keypadReading > 0 && keypadReading != key_no && keypadReading != key_yes && keypadReading != 'A' && keypadReading != 'B' && keypadReading != 'C' && keypadReading != 'D')
       {
-        deviceID[i] = keypadReading;
-
-        i++;
+        deviceID[_stageCounter] = keypadReading; // assign the input from keypad to the system id value
+        _stageCounter++;                         // increase stage to next
       }
-      display.display();
-    } // end stage 1 loop
-    Serial.println("Successfully got a device ID input.");
 
-    display.setCursor(120, 25);
-    display.println(F("2/3"));
+      // only do the following on confirmation stage
+      if (_stageCounter >= 2)
+      {
+        display.setCursor(20, 25); // set the cursor position
+        display.print(F("R U SURE?"));
+        // if the yes key has been pressed
+        if (keypadReading == key_yes)
+        {
+          _stageCounter++; // increase the stage
+        }
+      }
 
-    delay(2000);
-    // confirm input here
-    previousStage = currentStage;         // set the previous stage as the current stage
-    currentStage = stage_getDesiredState; // go to the next stage
+      display.display();               // render everything to the display
+    }                                  // end stage 1 loop
+    previousStage = stage_getDeviceID; // set the previous stage as the current stage
+    currentStage = currentStage++;     // go to the next stage
+  }                                    // end of function
+} // END "INPUT SYSTEM ID" FUNCTION
 
-  } // end of function
+// get system id
+void Input_OnOff()
+{
+  if (currentStage == stage_getDesiredState) // if the current stage is on get Device id input from the user
+  {
+
+    for (size_t _stageCounter = 0; _stageCounter < 2;) // stage 1 loop
+    {
+      char keypadReading = customKeypad.getKey(); // takes a reading from the keypad
+
+      display.clearDisplay(); // clear the display buffer contents
+
+      display.setCursor(0, 0);             // set the cursor position
+      display.print(F("Desired state: ")); // print to the display
+      if (desiredState == 'A')
+      {
+        display.print(F("On")); //
+      }
+      else if (desiredState == 'B')
+      {
+        display.print(F("Off")); //
+      }
+
+      /*can do the following on any stage when the back key is pressed*/
+      if (keypadReading == key_no)
+      {
+        /*TODO: prevent going below 0*/
+        _stageCounter--;                // set the stage back to previous
+        deviceID[_stageCounter] = null; // clear current system id value
+        display.clearDisplay();         // clear the display buffer contents
+      }
+
+      // only do the following if we are on stage 1, or 2 and input is a digit.
+      if (_stageCounter < 1)
+      {
+        if (keypadReading == 'A' || keypadReading == 'B')
+        {
+          desiredState = keypadReading;
+        }
+
+        desiredState = 'A'; // assign the input from keypad to the system id value
+        _stageCounter++;    // increase stage to next
+      }
+
+      // only do the following on confirmation stage
+      if (_stageCounter >= 1)
+      {
+        display.setCursor(20, 25); // set the cursor position
+        display.print(F("R U SURE?"));
+        // if the yes key has been pressed
+        if (keypadReading == key_yes)
+        {
+          _stageCounter++; // increase the stage
+        }
+      }
+
+      display.display();                   // render everything to the display
+    }                                      // end stage 1 loop
+    previousStage = stage_getDesiredState; // set the previous stage as the current stage
+    currentStage = stage_verify;           // go to the next stage
+  }                                        // end of function
+} // END "INPUT SYSTEM ID" FUNCTION
+
+// might delete
+void CompleteStage()
+{
+  if (currentStage == stage_complete)
+  {
+    display.clearDisplay();
+    display.setCursor(10, 10);
+    display.print(F("Step complete!"));
+    display.display();
+    delay(500);
+  }
+
+  currentStage = previousStage + 1;
 }
 
-void TestStage()
+// error stage
+void ErrorStage()
 {
-  if (currentStage == stage_Test)
+  if (currentStage == stage_error)
   {
-  display.clearDisplay();
-  display.setCursor(10, 10);
-  display.print(F("Step complete!"));
-  display.display();
+    display.clearDisplay();
+    display.setCursor(10, 10);
+    display.print(F("ERROR"));
+    display.display();
+    delay(500);
   }
+
+  currentStage = previousStage + 1;
+}
+
+// verify stage
+void VerifyStage()
+{
+  if (currentStage == stage_verify)
+  {
+
+    // todo:
+    // display the system id
+    display.setCursor(0, 0);
+    display.print(F("system id:"));
+    display.print(systemID[0]);
+    display.println(systemID[1]);
+    // display the device id
+    display.setCursor(0, 5); //(x,)y
+    display.print(F("device id:"));
+    display.print(systemID[0]);
+    display.println(systemID[1]);
+    // display the desired state
+    // wait for the confirm key to be pressed
+    // if back key is pressed, set state back to 1
+
+    delay(30000);
+  }
+
+  currentStage = previousStage + 1;
 }
