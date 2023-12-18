@@ -78,14 +78,16 @@ void setup()
       ; // Don't proceed, loop forever
   }
   Serial.println(F("SSD1306 allocation succedded"));
-  /*clear the screen and show logo for 2 seconds*/
 
+
+  /*clear the screen and show logo for 2 seconds*/
   display.clearDisplay();              // Clear the buffer
   display.setTextSize(1);              // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw black text
   display.setCursor(30, 10);           // set the position of the cursor
   // loop here. if index is odd dont show heart. if index is even show heart.
-  display.println(F("Initialzed"));
+  display.println(F("BOOTING UP"));
+  LoadingSeq(100, 10);
   display.display();
   delay(500);
   /*END SCREEN SETUP*/
@@ -407,7 +409,7 @@ void State_VerifyUserInput()
         display.setCursor(20, 10);
         display.print(F("PROCESSING DATA"));
         // loading
-        LoadingSeq(loadingTime * 30);
+        LoadingSeq(50, loadingTime * 30);
 
         display.display();
 
@@ -421,7 +423,7 @@ void State_VerifyUserInput()
         display.setCursor(15, 10);
         display.print(F("CLEARING DATA"));
         // loading here
-        LoadingSeq(loadingTime);
+        LoadingSeq(110, loadingTime);
         currentStage = stage_idle;
         internalStageCounter++;
       }
@@ -475,7 +477,10 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
 
         ClearData(); // clear everything that was input
         // show that it was sent
-        LoadingSeq(loadingTime);
+        display.clearDisplay();
+        display.setCursor(20, 10);
+        display.println(F("SENDING DATA"));
+        LoadingSeq(100, loadingTime);
         display.clearDisplay();
         display.setCursor(50, 10);
         display.println(F("SENT!"));
@@ -508,9 +513,9 @@ void ClearData()
   desiredState = "_";
 }
 
-void LoadingSeq(uint8_t _time)
+void LoadingSeq(uint8_t _startPosition, uint8_t _time)
 {
-  uint8_t randomSeed = random(loadingStartPosition, 125);
+  uint8_t randomSeed = random(_startPosition, 125);
 
   for (uint8_t i = 0; i < randomSeed; i++)
   {
