@@ -6,7 +6,6 @@ changelog
 //complex!!
 -[] refactor codebase to use display driver library
 //easy
--[] add improved ssd1306 library
 -[] make current cursor position blink when user is inputting data
 -[] change on/off keys to 'C' and 'D' respectivley
 -[] make verification screen scroll the text, or show the text in a page style
