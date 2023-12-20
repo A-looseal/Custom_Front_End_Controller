@@ -1,24 +1,29 @@
 changelog
 
-2023-12-19
+2023-12-20
+-added text centering funtion
 
-2023-12-18
+
+2023-12-19
 //complex!!
--[] refactor codebase to use display driver library
+-[/] refactor codebase to use display driver library
+-[X] tested this library with current code base. Its not worth the hassle!
 //easy
 -[] make current cursor position blink when user is inputting data
--[] change on/off keys to 'C' and 'D' respectivley
+-[X] change on/off keys to 'C' and 'D' respectivley
 -[] make verification screen scroll the text, or show the text in a page style
--[] format second fonts layout
--[] make loading bar use a single pixel draw instead of printing the '.' character
+-[/] make loading bar use a single pixel draw instead of printing the '.' character
 -[] add a time out feature when not in idle the device will go back to sleep mode
--[] change current idle phase to ebe a main menu phase with options
+-[] change current idle phase to be a main menu phase with options
 -[] add sleep phase. device is woken up when any key is pressed
 -[] change on/off user input in desired state phase to caps
 //tentative
 -[] implement feedback buzzer
 //hardware
 -[] add a buzzer to the panel
+
+2023-12-18
+-[X] test new ssd1306 display driver
 
 2023-12-17
 -[]

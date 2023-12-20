@@ -5,11 +5,9 @@
 #include "Adafruit_SSD1306.h"
 #include <Wire.h>
 #include <SPI.h>
-
-#include <Fonts/Picopixel.h>
-int fontOffset_x = 0;
-int fontOffset_y = 0;
 /*END INCLUSIONS*/
+
+#define CURRENT_VERSION 1.2
 
 /*4*4 KEYPAD STUFF*/
 const byte ROWS = 4; // four rows
@@ -22,20 +20,23 @@ char hexaKeys[ROWS][COLS] = {
     {'*', '0', '#', 'D'}};
 byte colPins[COLS] = {6, 7, 8, 9};     // connect to the column pinouts of the keypad
 byte rowPins[ROWS] = {10, 11, 12, 13}; // connect to the row pinouts of the keypad
+// the folowing is a legend of the kaypad buttons
 char null = '_';
 char key_no = '*';
 char key_yes = '#';
+char key_on = 'C';
+char key_off = 'D';
 /*END 4*4 KEYPAD STUFF*/
 
 /*OLED SCREEN STUFF*/
 #define SCREEN_WIDTH 128    // OLED display width, in pixels
-#define SCREEN_HEIGHT 32    // OLED display height, in pixels
+#define SCREEN_HEIGHT 64    // OLED display height, in pixels
 #define OLED_RESET 2        // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 /*END OLED SCREEN STUFF*/
 
-const uint8_t loadingTime = 1;            //
-const uint8_t loadingStartPosition = 100; //
+#define LOADING_TIME 1                 //
+#define LAODING_BAR_START_POSITION 100 //
 
 byte internalStageCounter;
 const byte stage_sendData = -3;              // the state # for send data state
@@ -56,12 +57,21 @@ char systemID[2] = {null, null};
 char deviceID[2] = {null, null};
 String desiredState = "_";
 
+/*TIME TRACKING*/
+#define DELAY_STARTUP 1000
+#define TIMEOUT_SLEEP 10000
+#define TIMEOUT_INPUT 10000
+ulong previousTime;
+
 /*HOUSE KEEPING*/
 // initialize an instance of class NewKeypad
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 // initialize an instance of class ADAFRUIT_SSD1306
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 /*END HOUSE KEEPING*/
+
+// common strings
+String rusure = "Are you sure?";
 
 void setup()
 {
@@ -79,17 +89,27 @@ void setup()
   }
   Serial.println(F("SSD1306 allocation succedded"));
 
-
   /*clear the screen and show logo for 2 seconds*/
   display.clearDisplay();              // Clear the buffer
   display.setTextSize(1);              // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE); // Draw black text
-  display.setCursor(30, 10);           // set the position of the cursor
-  // loop here. if index is odd dont show heart. if index is even show heart.
-  display.println(F("BOOTING UP"));
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+                                       // loop here. if index is odd dont show heart. if index is even show heart.
+
+  DisplayText_Centered(F("BOOTING UP"), 10);
   LoadingSeq(100, 10);
-  display.display();
-  delay(500);
+  // todo:
+  // dispaly the total startup time
+  ulong currentTime = millis();
+  display.setCursor(0, 55);
+  display.print(currentTime); // print the current time
+  display.println(F("ms"));   // print ms
+  // todo:
+  // display current program version
+  display.setCursor(100, 55);
+  display.print(F("v"));
+  display.println(CURRENT_VERSION); // print the current time
+  display.display();                // render the buffer contents to the display
+  delay(DELAY_STARTUP);
   /*END SCREEN SETUP*/
   currentStage = stage_idle;
 }
@@ -117,9 +137,7 @@ void State_Idle()
     for (size_t _stageCounter = 0; _stageCounter < 1;) // stage 1 loop
     {
       display.clearDisplay();
-      display.setTextColor(SSD1306_WHITE); // Draw black text
-      display.setCursor(15 + fontOffset_x, 10 + fontOffset_y);
-      display.print(F("TO BEGIN PRESS #"));
+      DisplayText_Centered("To begin press #", 30);
       display.display();
 
       char keypadReading = customKeypad.getKey();
@@ -131,22 +149,6 @@ void State_Idle()
         currentStage = stage_getSystemID; // go to the next stage
         internalStageCounter++;
         _stageCounter++;
-      }
-
-      // change font if 1 or 2 key pressed
-      if (keypadReading == '1')
-      {
-        display.setFont(&Picopixel);
-        // set offset for the custom font
-        fontOffset_x = 20;
-        fontOffset_y = 5;
-      }
-      if (keypadReading == '2')
-      {
-        display.setFont();
-        // set offset for the original font
-        fontOffset_x = 0;
-        fontOffset_y = 0;
       }
     }
   }
@@ -169,18 +171,20 @@ void State_GetInput_SystemID()
     for (size_t _stageCounter = 0; _stageCounter < _currentStageLength;) //
     {
       display.clearDisplay(); // clear the display buffer contents
-
-      display.setCursor(20 - fontOffset_x, 0 + fontOffset_y); // set the cursor position
-      display.println(F("ENTER SYSTEM ID"));                  // print to the display
-
-      display.setCursor(45 - fontOffset_x, 10 + fontOffset_y); // set the cursor position
-      display.print(F("< "));                                  // print to the display
-      display.print(systemID[0]);                              // select the first index of the system id array
-      display.print(systemID[1]);                              // select the second index of the system id array
-      display.println(F(" >"));                                // print to the display
-
       ScreenDesign_PhaseCheckpoint(_stageCounter, _currentStageLength);
       ScreenDesign_StageCheckpoint();
+
+      DisplayText_Centered(F("Enter system ID"), 10);
+
+      char textBuffer[4];
+      sprintf(textBuffer, ">%c%c", systemID[0], systemID[1]);
+      DisplayText_Centered(textBuffer, 20);
+
+      // display.setCursor(50, 20);  // set the cursor position
+      // display.print(F(">"));      // print to the display
+      // display.print(systemID[0]); // select the first index of the system id array
+      // display.print(systemID[1]); // select the second index of the system id array
+      //  display.println(F("<"));                                // print to the display
 
       char keypadReading = customKeypad.getKey(); // takes a reading from the keypad
 
@@ -191,7 +195,7 @@ void State_GetInput_SystemID()
         {
           _stageCounter--;                // set the stage back to previous
           systemID[_stageCounter] = null; // clear current system id value
-          display.clearDisplay();         // clear the display buffer contents
+          // display.clearDisplay();         // clear the display buffer contents
         }
       }
 
@@ -205,8 +209,11 @@ void State_GetInput_SystemID()
       // only do the following on confirmation stage
       if (_stageCounter == _currentStageLength - 1)
       {
-        display.setCursor(35 + fontOffset_x, 25 + fontOffset_y); // set the cursor position
-        display.print(F("R U SURE?"));
+
+        DisplayText_Centered(F("Are you sure?"), 30);
+
+        DisplayText_Centered(F("BACK  |  NEXT"), 55);
+
         // if the yes key has been pressed
         if (keypadReading == key_yes)
         {
@@ -232,13 +239,12 @@ void State_GetInput_DeviceID()
     {
       display.clearDisplay(); // clear the display buffer contents
 
-      display.setCursor(20 + fontOffset_x, 0 + fontOffset_y); // set the cursor position
-      display.println(F("ENTER DEVICE ID"));                  // print to the displaydisplay.setCursor(45 - fontOffset_x, 10 + fontOffset_y); // set the cursor position
-      display.setCursor(45 - fontOffset_x, 10 + fontOffset_y);
-      display.print(F("< "));     // print to the display
+      display.setCursor(20, 0);              // set the cursor position
+      display.println(F("ENTER DEVICE ID")); // print to the displaydisplay.setCursor(45 - fontOffset_x, 10 + fontOffset_y); // set the cursor position
+      display.setCursor(45, 10);
+      display.print(F(">"));      // print to the display
       display.print(deviceID[0]); // select the first index of the system id array
       display.print(deviceID[1]); // select the second index of the system id array
-      display.println(F(" >"));   // print to the display
 
       ScreenDesign_PhaseCheckpoint(_stageCounter, _currentStageLength);
       ScreenDesign_StageCheckpoint();
@@ -266,7 +272,7 @@ void State_GetInput_DeviceID()
       // only do the following on confirmation stage
       if (_stageCounter >= _currentStageLength - 1)
       {
-        display.setCursor(35 + fontOffset_x, 25 + fontOffset_y); // set the cursor position
+        display.setCursor(35, 25); // set the cursor position
         display.print(F("R U SURE?"));
         // if the yes key has been pressed
         if (keypadReading == key_yes)
@@ -295,13 +301,13 @@ void State_GetInput_OnOff()
 
       display.clearDisplay(); // clear the display buffer contents
 
-      display.setCursor(25 + fontOffset_x, 0 + fontOffset_y); // set the cursor position
-      display.println(F("TURN ON/OFF ? "));                   // print to the
+      display.setCursor(25, 0);                    // set the cursor position
+      display.println(F("Turn deice on or off?")); // print to the
 
-      display.setCursor(45 - fontOffset_x, 10 + fontOffset_y); // set the cursor position
-      display.print(F("< "));                                  // print to the display
-      display.print(desiredState);                             // select the first index of the system id array
-      display.println(F(" >"));                                // print to the display
+      display.setCursor(45, 10);   // set the cursor position
+      display.print(F("< "));      // print to the display
+      display.print(desiredState); // select the first index of the system id array
+      display.println(F(" >"));    // print to the display
 
       ScreenDesign_PhaseCheckpoint(_stageCounter, _currentStageLength);
       ScreenDesign_StageCheckpoint();
@@ -321,15 +327,15 @@ void State_GetInput_OnOff()
       if (_stageCounter < _currentStageLength - 1)
       {
         /*only runs if a key was pressed on the keypad*/
-        if (keypadReading == 'A' || keypadReading == 'B') // only proceed if the keypad reading is A or B
+        if (keypadReading == key_on || keypadReading == key_off) // only proceed if the keypad reading is A or B
         {
-          if (keypadReading == 'A') // only proceed if the keypad reading is A
+          if (keypadReading == key_on) // only proceed if the keypad reading is A
           {
-            desiredState = "On"; // set the desired state to ON
+            desiredState = "ON"; // set the desired state to ON
           }
-          else if (keypadReading == 'B') // only proceed if the keypad reading is b
+          else if (keypadReading == key_off) // only proceed if the keypad reading is b
           {
-            desiredState = "Off"; // set the desired state to OFF
+            desiredState = "OFF"; // set the desired state to OFF
           }
           _stageCounter++; // increase stage to next
         }
@@ -338,7 +344,7 @@ void State_GetInput_OnOff()
       // only runs when confirming user input
       if (_stageCounter >= _currentStageLength - 1)
       {
-        display.setCursor(35 + fontOffset_x, 25 + fontOffset_y); // set the cursor position
+        display.setCursor(35, 25); // set the cursor position
         display.print(F("R U SURE?"));
         // only runs if the yes key has been pressed
         if (keypadReading == key_yes)
@@ -381,7 +387,7 @@ void State_VerifyUserInput()
 
       display.clearDisplay();
       // display the system id
-      display.setCursor(2 + fontOffset_x, 0 + fontOffset_y);
+      display.setCursor(2, 0);
       display.print(F("SYS_ID:"));
       display.print(systemID[0]);
       display.print(systemID[1]);
@@ -392,7 +398,7 @@ void State_VerifyUserInput()
       display.print(deviceID[0]);
       display.println(deviceID[1]);
       // display the desired state
-      display.setCursor(15 + fontOffset_x, 10 + fontOffset_y); //(x,)y
+      display.setCursor(15, 10); //(x,)y
       display.print(F("DESIRED STATE: "));
       display.println(desiredState);
       // wait for the confirm key to be pressed
@@ -400,7 +406,7 @@ void State_VerifyUserInput()
 
       ScreenDesign_StageCheckpoint();
 
-      display.setCursor(35 + fontOffset_x, 25 + fontOffset_y); // set the cursor position
+      display.setCursor(35, 25); // set the cursor position
       display.print(F("R U SURE?"));
       // if the yes key has been pressed
       if (keypadReading == key_yes)
@@ -409,7 +415,7 @@ void State_VerifyUserInput()
         display.setCursor(20, 10);
         display.print(F("PROCESSING DATA"));
         // loading
-        LoadingSeq(50, loadingTime * 30);
+        LoadingSeq(50, LOADING_TIME * 30);
 
         display.display();
 
@@ -423,7 +429,7 @@ void State_VerifyUserInput()
         display.setCursor(15, 10);
         display.print(F("CLEARING DATA"));
         // loading here
-        LoadingSeq(110, loadingTime);
+        LoadingSeq(110, LOADING_TIME);
         currentStage = stage_idle;
         internalStageCounter++;
       }
@@ -480,7 +486,7 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
         display.clearDisplay();
         display.setCursor(20, 10);
         display.println(F("SENDING DATA"));
-        LoadingSeq(100, loadingTime);
+        LoadingSeq(100, LOADING_TIME);
         display.clearDisplay();
         display.setCursor(50, 10);
         display.println(F("SENT!"));
@@ -500,6 +506,21 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
 
 /*HELPER FUNCTIONS*/
 // clear everything that was previously input by the user
+/* finds the horizontal center of the desired text
+ *arguments: desired text, y coordinate.*/
+void DisplayText_Centered(String _text, int _y)
+{
+  int16_t x1;
+  int16_t y1;
+  uint16_t width;
+  uint16_t height;
+
+  display.getTextBounds(_text, 0, 0, &x1, &y1, &width, &height); // get the length of the text
+
+  display.setCursor((SCREEN_WIDTH - width) / 2, _y); // print centered text
+  display.println(_text);                            // text to display
+}
+//
 void ClearData()
 {
   for (size_t i = 0; i < 2; i++)
@@ -512,10 +533,10 @@ void ClearData()
   }
   desiredState = "_";
 }
-
+//
 void LoadingSeq(uint8_t _startPosition, uint8_t _time)
 {
-  uint8_t randomSeed = random(_startPosition, 125);
+  uint8_t randomSeed = random(_startPosition, SCREEN_WIDTH);
 
   for (uint8_t i = 0; i < randomSeed; i++)
   {
@@ -523,14 +544,23 @@ void LoadingSeq(uint8_t _startPosition, uint8_t _time)
     display.print(F("."));
   }
 
-  for (uint8_t i = randomSeed; i < SCREEN_WIDTH;)
+  for (uint8_t i = randomSeed; i < SCREEN_WIDTH - 5; i++)
   {
     display.setCursor(i, 20);
     display.print(F("."));
     display.display();
     delay(random(_time));
-    i++;
   }
+}
+
+/*TIME FUNCTIONS
+ * These functions help with time tracking, primarily for non blocking code.
+ * also used to track user inout*/
+// calculate if the timer has expired
+bool IsTimeoutExpired(ulong _interval)
+{
+  ulong currentTime = millis(); //get the current time from the timer
+
 }
 
 /*DISPLAY FUNCTIONS*/
@@ -540,17 +570,17 @@ void ScreenDesign_PhaseCheckpoint(char _stage, char _length)
   if (_stage == _length - 3)
   {
     // draw 3 dots
-    display.drawRect(0, 30, 2, 2, SSD1306_WHITE);
-    display.drawRect(0, 30 - 3, 2, 2, SSD1306_WHITE);
-    display.drawRect(0, 30 - 3 - 3, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60 - 3, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60 - 3 - 3, 2, 2, SSD1306_WHITE);
   }
 
   // if stage is at 1 draw 2 dots
   if (_stage == _length - 2)
   {
     // draw 3 dots
-    display.drawRect(0, 30, 2, 2, SSD1306_WHITE);
-    display.drawRect(0, 30 - 3, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60 - 3, 2, 2, SSD1306_WHITE);
   }
 
   // todo: if there is only one stage then come here
@@ -559,7 +589,7 @@ void ScreenDesign_PhaseCheckpoint(char _stage, char _length)
   if (_stage == _length - 1)
   {
     // draw 3 dots
-    display.drawRect(0, 30, 2, 2, SSD1306_WHITE);
+    display.drawRect(0, 60, 2, 2, SSD1306_WHITE);
   }
 }
 
@@ -568,28 +598,28 @@ void ScreenDesign_StageCheckpoint()
   switch (internalStageCounter)
   {
   case 1:
-    display.drawRect(display.width() - 2, 30, 2, 2, SSD1306_WHITE);             // send it
-    display.drawRect(display.width() - 2, 30 - 3, 2, 2, SSD1306_WHITE);         // desired state
-    display.drawRect(display.width() - 2, 30 - 3 - 3, 2, 2, SSD1306_WHITE);     // device id
-    display.drawRect(display.width() - 2, 30 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); // system id
+    display.drawRect(display.width() - 2, 60, 2, 2, SSD1306_WHITE);             // send it
+    display.drawRect(display.width() - 2, 60 - 3, 2, 2, SSD1306_WHITE);         // desired state
+    display.drawRect(display.width() - 2, 60 - 3 - 3, 2, 2, SSD1306_WHITE);     // device id
+    display.drawRect(display.width() - 2, 60 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); // system id
     break;
   case 2:
-    display.drawRect(display.width() - 2, 30, 2, 2, SSD1306_WHITE);         // send it
-    display.drawRect(display.width() - 2, 30 - 3, 2, 2, SSD1306_WHITE);     // desired state
-    display.drawRect(display.width() - 2, 30 - 3 - 3, 2, 2, SSD1306_WHITE); // device id
-    // display.drawRect(display.width() - 2, 30 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
+    display.drawRect(display.width() - 2, 60, 2, 2, SSD1306_WHITE);         // send it
+    display.drawRect(display.width() - 2, 60 - 3, 2, 2, SSD1306_WHITE);     // desired state
+    display.drawRect(display.width() - 2, 60 - 3 - 3, 2, 2, SSD1306_WHITE); // device id
+    // display.drawRect(display.width() - 2, 60 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
     break;
   case 3:
-    display.drawRect(display.width() - 2, 30, 2, 2, SSD1306_WHITE);     // send it
-    display.drawRect(display.width() - 2, 30 - 3, 2, 2, SSD1306_WHITE); // desired state
-    // display.drawRect(display.width() - 2, 30 - 3 - 3, 2, 2, SSD1306_WHITE); //device id
-    // display.drawRect(display.width() - 2, 30 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
+    display.drawRect(display.width() - 2, 60, 2, 2, SSD1306_WHITE);     // send it
+    display.drawRect(display.width() - 2, 60 - 3, 2, 2, SSD1306_WHITE); // desired state
+    // display.drawRect(display.width() - 2, 60 - 3 - 3, 2, 2, SSD1306_WHITE); //device id
+    // display.drawRect(display.width() - 2, 60 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
     break;
   case 4:
-    display.drawRect(display.width() - 2, 30, 2, 2, SSD1306_WHITE); // send it
-    // display.drawRect(display.width() - 2, 30 - 3, 2, 2, SSD1306_WHITE); //desired state
-    // display.drawRect(display.width() - 2, 30 - 3 - 3, 2, 2, SSD1306_WHITE); //device id
-    // display.drawRect(display.width() - 2, 30 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
+    display.drawRect(display.width() - 2, 60, 2, 2, SSD1306_WHITE); // send it
+    // display.drawRect(display.width() - 2, 60 - 3, 2, 2, SSD1306_WHITE); //desired state
+    // display.drawRect(display.width() - 2, 60 - 3 - 3, 2, 2, SSD1306_WHITE); //device id
+    // display.drawRect(display.width() - 2, 60 - 3 - 3 - 3, 2, 2, SSD1306_WHITE); //system id
     break;
 
   default:
