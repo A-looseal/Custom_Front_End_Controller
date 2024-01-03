@@ -5,6 +5,7 @@
 #include "Adafruit_SSD1306.h"
 #include <Wire.h>
 #include <SPI.h>
+#include <ArduinoJson.h>
 /*END INCLUSIONS*/
 
 #define CURRENT_VERSION 1.2
@@ -82,10 +83,20 @@ const byte stage_length_getDesiredState = 2; // the amount of key presses we are
 byte internalStageCounter;
 
 // DATA STRUCTURE
-int systemIDD[2]= {null, null};
+byte currentDataType;
+const byte dataType_State = 1;
+const byte dataType_Speed = 2;
+int systemIDD;
 char systemID[2] = {null, null};
+int deviceIDD;
 char deviceID[2] = {null, null};
 char *desiredState = {"_"};
+int desiredSpeed;
+
+// ************************************************** JSON SETUP **************************************************
+  // Inside the brackets, 200 is the RAM allocated to this document.
+  // Use https://arduinojson.org/v6/assistant to compute the capacity.
+  StaticJsonDocument<200> doc; // Allocate the JSON document
 
 /*TIME TRACKING*/
 #define DELAY_STARTUP 1000
@@ -109,41 +120,45 @@ void setup()
   Serial.begin(9600);
   pinMode(BUZZER_PIN, OUTPUT); // set the pin buzzer is connected to as output
 
-  // KEYPAD SETUP
+  // ************************************************** KEYPAD SETUP **************************************************
   customKeypad.setHoldTime(500);
 
-  /*BEGIN SCREEN SETUP*/
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  // ************************************************** SCREEN SETUP **************************************************
+  // check if there is a screen connected to the system using i2c
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
   {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;)
-      ; // Don't proceed, loop forever
+      ; // no screen detected. Don't proceed, loop forever
   }
   Serial.println(F("SSD1306 allocation succedded"));
 
-  /*clear the screen and show logo for 2 seconds*/
+  // set the settings to use for the screen
   display.clearDisplay();              // Clear the buffer
   display.setTextSize(1);              // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw white text
-                                       // loop here. if index is odd dont show heart. if index is even show heart.
 
+  // ************************************************** DISPLAY STARTUP SEQUENCE **************************************************
+  // display booting up text
   DisplayText_Centered(F("BOOTING UP"), 10);
-  LoadingSeq(100, 10);
-  // todo:
-  // dispaly the total startup time
-  ulong currentTime = millis();
+  LoadingSeq(100, 10); // fake loading sequence
+
+  // display the total startup time
+  ulong currentTime = millis(); // save the current system uptime
   display.setCursor(0, 55);
   display.print(currentTime); // print the current time
   display.println(F("ms"));   // print ms
-  // todo:
+
   // display current program version
   display.setCursor(100, 55);
   display.print(F("v"));
   display.println(CURRENT_VERSION); // print the current time
   display.display();                // render the buffer contents to the display
   delay(DELAY_STARTUP);
-  /*END SCREEN SETUP*/
+
+  
+
+  // ************************************************** PROGRAM SETUP **************************************************
   currentStage = stage_sleep;
 }
 
@@ -199,17 +214,20 @@ void State_MainMenu()
       DisplayText_Centered("To begin press #", 30);
       display.display();
 
+      currentDataType = -1;
       char keypadReading = customKeypad.getKey();
 
       if (keypadReading == 'D')
       {
         buzzer_Keypad_Enabled = !buzzer_Keypad_Enabled;
+        Buzzer_ButtonPress();
       }
 
       // proceed if # key pressed
       if (keypadReading == key_yes)
       {
         Buzzer_ButtonPress();
+        currentDataType = dataType_State;
         previousStage = stage_mainMenu;   // set the previous stage as the current stage
         currentStage = stage_getSystemID; // go to the next stage
         internalStageCounter++;
@@ -242,14 +260,8 @@ void State_GetInput_SystemID()
       DisplayText_Centered(F("Enter system ID"), 10);
 
       char textBuffer[4];
-      sprintf(textBuffer, ">%c%c", systemIDD[0], systemIDD[1]);
+      sprintf(textBuffer, ">%c%c", systemID[0], systemID[1]);
       DisplayText_Centered(textBuffer, 20);
-
-      // display.setCursor(50, 20);  // set the cursor position
-      // display.print(F(">"));      // print to the display
-      // display.print(systemID[0]); // select the first index of the system id array
-      // display.print(systemID[1]); // select the second index of the system id array
-      //  display.println(F("<"));                                // print to the display
 
       char keypadReading = customKeypad.getKey(); // takes a reading from the keypad
 
@@ -259,7 +271,7 @@ void State_GetInput_SystemID()
         if (_stageCounter != 0) // prevent going below 0*/
         {
           _stageCounter--;                // set the stage back to previous
-          systemIDD[_stageCounter] = null; // clear current system id value
+          systemID[_stageCounter] = null; // clear current system id value
           Buzzer_ButtonPress();
           // display.clearDisplay();         // clear the display buffer contents
         }
@@ -268,7 +280,7 @@ void State_GetInput_SystemID()
       // only do the following if we are on stage 1, or 2 and input is a digit.
       if ((_stageCounter < _currentStageLength - 1) && (keypadReading > 0) && (keypadReading != key_no) && (keypadReading != key_yes) && (keypadReading != 'A') && (keypadReading != 'B') && (keypadReading != 'C') && (keypadReading != 'D'))
       {
-        systemIDD[_stageCounter] = keypadReading; // assign the input from keypad to the system id value
+        systemID[_stageCounter] = keypadReading; // assign the input from keypad to the system id value
         _stageCounter++;                         // increase stage to next
         Buzzer_ButtonPress();
       }
@@ -284,6 +296,7 @@ void State_GetInput_SystemID()
         // if the yes key has been pressed
         if (keypadReading == key_yes)
         {
+          systemIDD = 10 * (systemID[0] - '0') + systemID[1] - '0';
           internalStageCounter++;
           _stageCounter++; // increase the stage
           Buzzer_ButtonPress();
@@ -350,6 +363,7 @@ void State_GetInput_DeviceID()
         // if the yes key has been pressed
         if (keypadReading == key_yes)
         {
+          deviceIDD = 10 * (deviceID[0] - '0') + deviceID[1] - '0';
           internalStageCounter++;
           _stageCounter++; // increase the stage
 
@@ -468,14 +482,12 @@ void State_VerifyUserInput()
       // display the system id
       display.setCursor(2, 0);
       display.print(F("SYS_ID:"));
-      display.print(systemIDD[0]);
-      display.print(systemIDD[1]);
+      display.print(systemIDD);
 
       display.print(F(" | "));
       // display the device id
       display.print(F("DEV_ID:"));
-      display.print(deviceID[0]);
-      display.println(deviceID[1]);
+      display.print(deviceIDD);
       // display the desired state
       display.setCursor(15, 10); //(x,)y
       display.print(F("DESIRED STATE: "));
@@ -493,7 +505,10 @@ void State_VerifyUserInput()
         display.clearDisplay();
         display.setCursor(20, 10);
         display.print(F("PROCESSING DATA"));
-        // loading
+
+        ProcessData();
+
+        // fake loading bar to simulate doing something
         LoadingSeq(50, LOADING_TIME * 30);
 
         display.display();
@@ -567,6 +582,10 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
         display.setCursor(20, 10);
         display.println(F("SENDING DATA"));
         LoadingSeq(100, LOADING_TIME);
+
+        serializeJson(doc, Serial);  // send the json document
+        Serial.println(F(""));
+
         display.clearDisplay();
         display.setCursor(50, 10);
         display.println(F("SENT!"));
@@ -582,13 +601,22 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
   }
 }
 
-//takes the input data, and serializes it
-void State_SerializeData()
+// takes the input data, and serializes it
+void ProcessData()
 {
-//code here
+  doc["systemID"] = systemIDD;
+  doc["deviceID"] = deviceIDD;
+  if (currentDataType == dataType_State)
+  {
+    doc["desiredState"] = desiredState;
+  }
+  if (currentDataType == dataType_Speed)
+  {
+    doc["desiredSpeed"] = desiredSpeed;
+  }
 }
-// ************************************************** HELPER FUNCTIONS **************************************************/
 
+// ************************************************** HELPER FUNCTIONS **************************************************/
 /* finds the horizontal center of the desired text
  arguments: desired text, y coordinate. */
 void DisplayText_Centered(String _text, int _y)
