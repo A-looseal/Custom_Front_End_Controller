@@ -6,9 +6,14 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <ArduinoJson.h>
+#include <SoftwareSerial.h>
 /*END INCLUSIONS*/
 
 #define CURRENT_VERSION 1.2
+
+SoftwareSerial System_1(18, 19);
+SoftwareSerial System_2(16, 17);
+SoftwareSerial System_3(14, 15);
 
 // BUZZER STUFF
 #define BUZZER_PIN 5
@@ -65,7 +70,7 @@ const int spriteWidth = sizeof(heartImage);
 #define LOADING_TIME 1                 //
 #define LAODING_BAR_START_POSITION 100 //
 
-// states
+// SYSTEM STATES
 const byte stage_sendData = -3; // the state # for send data state
 const byte stage_verify = -2;   // the index # for verify input state
 const byte stage_error = -1;    // the index # for error state
@@ -76,7 +81,7 @@ const byte stage_getDeviceID = 3;     // the state # for get device id state
 const byte stage_getDesiredState = 4; // the index # for get desired device state
 byte previousStage;                   // store the previous stage we were on
 byte currentStage;                    // stores the current stage we are on
-// internal stage
+// internal PROCESS STAGES
 const byte stage_length_getSystemID = 3;     // the amount of key presses we are expecting during this stage. digit[0] > digit[1] > confirm
 const byte stage_length_getDeviceID = 3;     // the amount of key presses we are expecting during this stage. digit[0] > digit[1] > confirm
 const byte stage_length_getDesiredState = 2; // the amount of key presses we are expecting during this stage. digit[0] > digit[1] > confirm
@@ -90,13 +95,14 @@ int systemIDD;
 char systemID[2] = {null, null};
 int deviceIDD;
 char deviceID[2] = {null, null};
+int desiredState_d;
 char *desiredState = {"_"};
 int desiredSpeed;
 
 // ************************************************** JSON SETUP **************************************************
-  // Inside the brackets, 200 is the RAM allocated to this document.
-  // Use https://arduinojson.org/v6/assistant to compute the capacity.
-  StaticJsonDocument<200> doc; // Allocate the JSON document
+// Inside the brackets, 200 is the RAM allocated to this document.
+// Use https://arduinojson.org/v6/assistant to compute the capacity.
+StaticJsonDocument<200> doc; // Allocate the JSON document
 
 /*TIME TRACKING*/
 #define DELAY_STARTUP 1000
@@ -110,7 +116,6 @@ ulong currentMillis;
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 // initialize an instance of class ADAFRUIT_SSD1306
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-/*END HOUSE KEEPING*/
 
 // common strings
 char *rusure = {"Are you sure?"};
@@ -156,7 +161,10 @@ void setup()
   display.display();                // render the buffer contents to the display
   delay(DELAY_STARTUP);
 
-  
+  // connect to external systems
+  System_1.begin(9600);
+  System_2.begin(9600);
+  System_3.begin(9600);
 
   // ************************************************** PROGRAM SETUP **************************************************
   currentStage = stage_sleep;
@@ -422,11 +430,13 @@ void State_GetInput_OnOff()
           {
             Buzzer_ButtonPress();
             desiredState = "ON"; // set the desired state to ON
+            desiredState_d = 1;
           }
           else if (keypadReading == key_off) // only proceed if the keypad reading is b
           {
             Buzzer_ButtonPress();
             desiredState = "OFF"; // set the desired state to OFF
+            desiredState_d = 0;
           }
           _stageCounter++; // increase stage to next
         }
@@ -583,8 +593,10 @@ void State_SendData(char _systemID[2], char _deviceID[2], String _desiredState)
         display.println(F("SENDING DATA"));
         LoadingSeq(100, LOADING_TIME);
 
-        serializeJson(doc, Serial);  // send the json document
-        Serial.println(F(""));
+        //System_1.begin(9600);
+        serializeJson(doc, System_1); // send the json document
+        Serial.println(F("Data sent!"));
+        System_1.flush();
 
         display.clearDisplay();
         display.setCursor(50, 10);
@@ -608,7 +620,7 @@ void ProcessData()
   doc["deviceID"] = deviceIDD;
   if (currentDataType == dataType_State)
   {
-    doc["desiredState"] = desiredState;
+    doc["desiredState"] = desiredState_d;
   }
   if (currentDataType == dataType_Speed)
   {
